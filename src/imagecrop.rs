@@ -18,19 +18,44 @@ pub struct ImageCrop {
 
 impl ImageCrop {
     pub fn open(file: &Path) -> ImageResult<ImageCrop> {
-        Ok(ImageCrop {
-            original: image::open(&Path::new(file))?,
-        })
+        Ok(
+            ImageCrop {
+                original: image::open(&Path::new(file))?,
+            }
+        )
+    }
+
+    pub fn from_buffer(width: u32, height: u32, buffer: Vec<u8>) -> ImageResult<ImageCrop> {
+        let image = image::ImageBuffer::from_raw(width, height, buffer).unwrap();
+
+        Ok(
+            ImageCrop {
+                original: DynamicImage::ImageRgba8(image)
+            }
+        )
+    }
+
+    pub fn auto_crop(&mut self) -> (u32, u32, DynamicImage) {
+        let (top_left_corner, bottom_right_corner) = self.calculate_corners();
+        let crop = self.original.crop(
+            top_left_corner.x,
+            top_left_corner.y,
+            bottom_right_corner.x - top_left_corner.x,
+            bottom_right_corner.y - top_left_corner.y,
+        );
+
+        (crop.width(), crop.height(), crop)
     }
 
     pub fn calculate_corners(&self) -> (Point, Point) {
         (self.top_left_corner(), self.bottom_right_corner())
     }
 
-    fn is_white(pixel: Rgba<u8>) -> bool {
+    fn is_white_and_not_transparent(pixel: Rgba<u8>) -> bool {
         pixel[0] != 255 &&
         pixel[1] != 255 &&
-        pixel[2] != 255
+        pixel[2] != 255 &&
+        pixel[3] != 0
     }
 
     fn top_left_corner(&self) -> Point {
@@ -44,7 +69,7 @@ impl ImageCrop {
         for x in 0..(self.original.dimensions().0) {
             for y in 0..(self.original.dimensions().1) {
                 let pixel = self.original.get_pixel(x, y);
-                if Self::is_white(pixel) {
+                if Self::is_white_and_not_transparent(pixel) {
                     return x;
                 }
             }
@@ -56,7 +81,7 @@ impl ImageCrop {
         for y in 0..(self.original.dimensions().1) {
             for x in 0..(self.original.dimensions().0) {
                 let pixel = self.original.get_pixel(x, y);
-                if Self::is_white(pixel) {
+                if Self::is_white_and_not_transparent(pixel) {
                     return y;
                 }
             }
@@ -79,7 +104,7 @@ impl ImageCrop {
             let mut y = self.original.dimensions().1 as i32 - 1;
             while y >= 0 {
                 let pixel = self.original.get_pixel(x as u32, y as u32);
-                if Self::is_white(pixel) {
+                if Self::is_white_and_not_transparent(pixel) {
                     return x as u32 + 1;
                 }
                 y -= 1;
@@ -97,7 +122,7 @@ impl ImageCrop {
             let mut x = self.original.dimensions().0 as i32 - 1;
             while x >= 0 {
                 let pixel = self.original.get_pixel(x as u32, y as u32);
-                if Self::is_white(pixel) {
+                if Self::is_white_and_not_transparent(pixel) {
                     return y as u32 + 1;
                 }
                 x -= 1;
